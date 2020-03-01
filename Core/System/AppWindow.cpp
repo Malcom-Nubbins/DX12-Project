@@ -81,7 +81,7 @@ HRESULT AppWindow::Initialise(HINSTANCE hInst, int cmdShow)
 	m_WindowRect = { 0, 0, static_cast<LONG>(m_WindowWidth), static_cast<LONG>(m_WindowHeight) };
 	AdjustWindowRect(&m_WindowRect, WS_OVERLAPPEDWINDOW, false);
 
-	m_hWnd = CreateWindowEx(NULL, L"AppWindow", L"DirectX 12 Project", WS_OVERLAPPEDWINDOW, m_ScreenCentre.x, m_ScreenCentre.y, m_WindowWidth, m_WindowHeight, nullptr, nullptr, m_hInstance, nullptr);
+	m_hWnd = CreateWindowEx(NULL, L"AppWindow", L"DirectX 12 Project", WS_OVERLAPPEDWINDOW, posX, posY, m_WindowWidth, m_WindowHeight, nullptr, nullptr, m_hInstance, nullptr);
 
 	if (!m_hWnd)
 	{

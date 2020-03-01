@@ -13,6 +13,9 @@ Application::~Application()
 void Application::Cleanup()
 {
 	m_Renderer->Cleanup();
+	m_AppWindow->Cleanup();
+
+	delete m_AppWindow;
 }
 
 HRESULT Application::Initialise(HINSTANCE hInst, int cmdShow)
