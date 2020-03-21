@@ -1,33 +1,40 @@
 #include "Globals/stdafx.h"
 #include "Application.h"
+#include "DX12Engine.h"
+
+#include <Shlwapi.h>
+#include <dxgidebug.h>
+
+void ReportLiveObjects()
+{
+	IDXGIDebug1* dxgiDebug;
+	DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug));
+
+	dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_IGNORE_INTERNAL);
+	dxgiDebug->Release();
+}
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
-	MSG msg = { 0 };
+	int retCode = 0;
 
-	Application* m_App = new Application();
-	if (FAILED(m_App->Initialise(hInstance, nCmdShow)))
+	WCHAR path[50];
+	HMODULE hModule = GetModuleHandleW(nullptr);
+	if (GetModuleFileNameW(hModule, path, 50) > 0)
 	{
-		return -1;
+		PathRemoveFileSpecW(path);
+		SetCurrentDirectoryW(path);
 	}
 
-	while (WM_QUIT != msg.message)
+	Application::Create(hInstance);
 	{
-		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
-		{
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-		else
-		{
-			m_App->Update(0);
-			m_App->Draw();
-		}
+		std::shared_ptr<DX12Engine> dx12Engine = std::make_shared<DX12Engine>(L"DX12 Engine", 1280, 720);
+		retCode = Application::Get().Run(dx12Engine);
 	}
 
-	m_App->Cleanup();
-	delete m_App;
-	m_App = nullptr;
+	Application::Destroy();
 
-	return (int)msg.wParam;
+	atexit(&ReportLiveObjects);
+
+	return retCode;
 }

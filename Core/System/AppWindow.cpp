@@ -1,96 +1,241 @@
 #include "AppWindow.h"
+#include "AppEngineBase.h"
+#include "../Application.h"
+#include "../Globals/Helpers.h"
+#include "CommandQueue.h"
 
-static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	AppWindow* me = reinterpret_cast<AppWindow*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
-	if (me)
-	{
-		return me->RealWndProc(hWnd, msg, wParam, lParam);
-	}
-
-	return DefWindowProc(hWnd, msg, wParam, lParam);
-}
-
-LRESULT CALLBACK AppWindow::RealWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	switch (msg)
-	{
-	case WM_CLOSE:
-	case WM_DESTROY:
-		PostQuitMessage(0);
-		return 0;
-
-	default:
-		return DefWindowProc(hwnd, msg, wParam, lParam);
-	}
-}
-
-AppWindow::AppWindow() 
-	: m_hWnd(nullptr)
-	, m_hInstance(nullptr)
-	, m_WindowWidth(0)
-	, m_WindowHeight(0)
+AppWindow::AppWindow(HWND hWnd, const std::wstring& windowName, UINT clientWidth, UINT clientHeight)
+	: m_hWnd(hWnd)
+	, m_WindowName(windowName)
+	, m_WindowWidth(clientWidth)
+	, m_WindowHeight(clientHeight)
 	, m_ScreenCentre()
 	, m_WindowRect()
 {
+	Application& app = Application::Get();
+
+	m_SwapChain = CreateSwapChain();
+	m_RTVDescriptorHeap = app.CreateDescriptorHeap(BufferCount, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	m_RTVDescriptorSize = app.GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+	UpdateRenderTargetViews();
+
+	m_ScreenCentre.x = m_WindowWidth / 2;
+	m_ScreenCentre.y = m_WindowHeight / 2;
 }
 
 AppWindow::~AppWindow()
 {
 }
 
-void AppWindow::Cleanup()
+void AppWindow::RegisterCallbacks(std::shared_ptr<AppEngineBase> pAppEngineBase)
 {
-	m_hInstance = nullptr;
-	m_hWnd = nullptr;
+	m_pEngineBase = pAppEngineBase;
 }
 
-HRESULT AppWindow::Initialise(HINSTANCE hInst, int cmdShow)
+void AppWindow::OnUpdate()
 {
-	m_hInstance = hInst;
-
-	m_WindowWidth = WINDOW_WIDTH;
-	m_WindowHeight = WINDOW_HEIGHT;
-
-	m_ScreenCentre.x = m_WindowWidth / 2;
-	m_ScreenCentre.y = m_WindowHeight / 2;
-
-	float posX = static_cast<float>((GetSystemMetrics(SM_CXSCREEN) - m_WindowWidth) / 2);
-	float posY = static_cast<float>((GetSystemMetrics(SM_CYSCREEN) - m_WindowHeight) / 2);
-
-	WNDCLASSEXW windowClass = {};
-
-	windowClass.cbSize = sizeof(WNDCLASSEX);
-	windowClass.style = CS_HREDRAW | CS_VREDRAW;
-	windowClass.lpfnWndProc = WndProc;
-	windowClass.cbClsExtra = 0;
-	windowClass.cbWndExtra = 0;
-	windowClass.hInstance = m_hInstance;
-	windowClass.hIcon = (HICON)LoadImage(m_hInstance, MAKEINTRESOURCE(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
-	windowClass.hCursor = ::LoadCursorW(m_hInstance, IDC_ARROW);
-	windowClass.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-	windowClass.lpszMenuName = NULL;
-	windowClass.lpszClassName = L"AppWindow";
-	windowClass.hIconSm = (HICON)LoadImage(m_hInstance, MAKEINTRESOURCE(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
-
-	if (!RegisterClassEx(&windowClass))
+	if (auto pEngine = m_pEngineBase.lock())
 	{
-		return E_FAIL;
+		pEngine->OnUpdate();
+	}
+}
+
+void AppWindow::OnRender()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnRender();
+	}
+}
+
+void AppWindow::OnKeyPressed()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnKeyPressed();
+	}
+}
+
+void AppWindow::OnKeyReleased()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnKeyReleased();
+	}
+}
+
+void AppWindow::OnMouseMoved()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnMouseMoved();
+	}
+}
+
+void AppWindow::OnMouseButtonDown()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnMouseButtonDown();
+	}
+}
+
+void AppWindow::OnMouseButtonUp()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnMouseButtonUp();
+	}
+}
+
+void AppWindow::OnMouseWheel()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnMouseWheel();
+	}
+}
+
+void AppWindow::OnResize(UINT width, UINT height)
+{
+	if (m_WindowWidth != width || m_WindowHeight != height)
+	{
+		m_WindowWidth = std::max(1, static_cast<int>(width));
+		m_WindowHeight = std::max(1, static_cast<int>(height));
+
+		Application::Get().Flush();
+
+		for (int i = 0; i < BufferCount; ++i)
+		{
+			m_BackBuffers[i].Reset();
+		}
+
+		DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+		ThrowIfFailed(m_SwapChain->GetDesc(&swapChainDesc));
+		ThrowIfFailed(m_SwapChain->ResizeBuffers(BufferCount, m_WindowWidth, m_WindowHeight, swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
+
+		m_CurrentBackBufferIndex = m_SwapChain->GetCurrentBackBufferIndex();
+
+		UpdateRenderTargetViews();
 	}
 
-	m_WindowRect = { 0, 0, static_cast<LONG>(m_WindowWidth), static_cast<LONG>(m_WindowHeight) };
-	AdjustWindowRect(&m_WindowRect, WS_OVERLAPPEDWINDOW, false);
-
-	m_hWnd = CreateWindowEx(NULL, L"AppWindow", L"DirectX 12 Project", WS_OVERLAPPEDWINDOW, posX, posY, m_WindowWidth, m_WindowHeight, nullptr, nullptr, m_hInstance, nullptr);
-
-	if (!m_hWnd)
+	if (auto pEngine = m_pEngineBase.lock())
 	{
-		return E_FAIL;
+		pEngine->OnResize(width, height);
+	}
+}
+
+void AppWindow::Cleanup()
+{
+	if (auto pEngine = m_pEngineBase.lock())
+	{
+		pEngine->OnWindowDestroyed();
 	}
 
-	SetWindowLongPtr(m_hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+	for (int i = 0; i < BufferCount; ++i)
+	{
+		auto resource = m_BackBuffers[i].Get();
+		m_BackBuffers[i].Reset();
+	}
 
-	ShowWindow(m_hWnd, cmdShow);
+	if (m_hWnd)
+	{
+		DestroyWindow(m_hWnd);
+		m_hWnd = nullptr;
+	}
+}
 
-	return S_OK;
+
+void AppWindow::Show()
+{
+	::ShowWindow(m_hWnd, SW_SHOW);
+}
+
+void AppWindow::Hide()
+{
+	::ShowWindow(m_hWnd, SW_HIDE);
+}
+
+UINT AppWindow::Present()
+{
+	UINT syncInterval = 1;
+	UINT presentFlags = 0;
+	ThrowIfFailed(m_SwapChain->Present(syncInterval, presentFlags));
+
+	m_CurrentBackBufferIndex = m_SwapChain->GetCurrentBackBufferIndex();
+
+	return m_CurrentBackBufferIndex;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE AppWindow::GetCurrentRenderTargetView() const
+{
+	return CD3DX12_CPU_DESCRIPTOR_HANDLE(m_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_CurrentBackBufferIndex, m_RTVDescriptorSize);
+}
+
+ComPtr<ID3D12Resource> AppWindow::GetCurrentBackBuffer() const
+{
+	return m_BackBuffers[m_CurrentBackBufferIndex];
+}
+
+ComPtr<IDXGISwapChain4> AppWindow::CreateSwapChain()
+{
+	Application& app = Application::Get();
+	ComPtr<IDXGISwapChain4> dxgiSwapChain4;
+	ComPtr<IDXGIFactory4> dxgiFactory4;
+	UINT createFactoryFlags;
+
+#if defined(_DEBUG)
+	createFactoryFlags = DXGI_CREATE_FACTORY_DEBUG;
+#endif
+
+	ThrowIfFailed(CreateDXGIFactory2(createFactoryFlags, IID_PPV_ARGS(&dxgiFactory4)));
+
+	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+	swapChainDesc.Width = m_WindowWidth;
+	swapChainDesc.Height = m_WindowHeight;
+	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swapChainDesc.Stereo = false;
+	swapChainDesc.SampleDesc = { 1, 0 };
+	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swapChainDesc.BufferCount = BufferCount;
+	swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+	swapChainDesc.Flags = 0;
+
+	ID3D12CommandQueue* commandQueue = app.GetCommandQueue()->GetCommandQueue().Get();
+
+	ComPtr<IDXGISwapChain1> swapChain1;
+	ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
+		commandQueue,
+		m_hWnd,
+		&swapChainDesc,
+		nullptr,
+		nullptr,
+		&swapChain1));
+
+	ThrowIfFailed(dxgiFactory4->MakeWindowAssociation(m_hWnd, DXGI_MWA_NO_ALT_ENTER));
+	ThrowIfFailed(swapChain1.As(&dxgiSwapChain4));
+
+	m_CurrentBackBufferIndex = dxgiSwapChain4->GetCurrentBackBufferIndex();
+
+	return dxgiSwapChain4;
+}
+
+void AppWindow::UpdateRenderTargetViews()
+{
+	auto device = Application::Get().GetDevice();
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	for (int i = 0; i < BufferCount; ++i)
+	{
+		ComPtr<ID3D12Resource> backBuffer;
+		ThrowIfFailed(m_SwapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
+
+		device->CreateRenderTargetView(backBuffer.Get(), nullptr, rtvHandle);
+
+		m_BackBuffers[i] = backBuffer;
+		rtvHandle.Offset(m_RTVDescriptorSize);
+	}
 }

@@ -39,9 +39,9 @@ private:
 	void UpdateRenderTargetViews();
 
 	ComPtr<ID3D12CommandAllocator> CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE);
-	ComPtr<ID3D12GraphicsCommandList> CreateCommandList(D3D12_COMMAND_LIST_TYPE);
-	ComPtr<ID3D12Fence> CreateFence();
-	HANDLE CreateEventHandle();
+	//ComPtr<ID3D12GraphicsCommandList> CreateCommandList(D3D12_COMMAND_LIST_TYPE);
+	//ComPtr<ID3D12Fence> CreateFence();
+	//HANDLE CreateEventHandle();
 
 private:
 

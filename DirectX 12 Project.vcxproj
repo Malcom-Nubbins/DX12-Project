@@ -104,7 +104,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>dxgi.lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>dxgi.lib;d3d12.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dxgi.lib;dxguid.lib;d3d12.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -140,18 +140,25 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Core\System\AppEngineBase.cpp" />
+    <ClCompile Include="Core\System\CommandQueue.cpp" />
     <ClCompile Include="Core\System\AppRenderer_dx12.cpp" />
     <ClCompile Include="Core\System\AppWindow.cpp" />
     <ClCompile Include="Core\Application.cpp" />
     <ClCompile Include="Core\main.cpp" />
+    <ClCompile Include="Core\DX12Engine.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Core\Globals\Helpers.h" />
+    <ClInclude Include="Core\System\AppEngineBase.h" />
+    <ClInclude Include="Core\System\CommandQueue.h" />
     <ClInclude Include="Core\Globals\d3dx12.h" />
     <ClInclude Include="Core\System\AppRenderer_dx12.h" />
     <ClInclude Include="Core\Globals\AppValues.h" />
     <ClInclude Include="Core\System\AppWindow.h" />
     <ClInclude Include="Core\Application.h" />
     <ClInclude Include="Core\Globals\stdafx.h" />
+    <ClInclude Include="Core\DX12Engine.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

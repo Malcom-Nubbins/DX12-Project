@@ -63,9 +63,9 @@ HRESULT AppRenderer_dx12::Initialise()
 		m_CommandAllocators[i] = CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	}
 
-	m_CommandList = CreateCommandList(D3D12_COMMAND_LIST_TYPE_DIRECT);
-	m_Fence = CreateFence();
-	m_FenceEvent = CreateEventHandle();
+	//m_CommandList = CreateCommandList(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	//m_Fence = CreateFence();
+	//m_FenceEvent = CreateEventHandle();
 
 	m_IsInitialised = true;
 
@@ -205,17 +205,6 @@ ComPtr<ID3D12CommandQueue> AppRenderer_dx12::CreateCommandQueue(D3D12_COMMAND_LI
 {
 	ComPtr<ID3D12CommandQueue> d3d12CommandQueue;
 
-	D3D12_COMMAND_QUEUE_DESC desc = {};
-	desc.Type = type;
-	desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-	desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	desc.NodeMask = 0;
-
-	if (FAILED(m_Device->CreateCommandQueue(&desc, IID_PPV_ARGS(&d3d12CommandQueue))))
-	{
-		throw new std::exception("Failed to create command queue");
-	}
-
 	return d3d12CommandQueue;
 }
 
@@ -325,39 +314,4 @@ ComPtr<ID3D12CommandAllocator> AppRenderer_dx12::CreateCommandAllocator(D3D12_CO
 	}
 
 	return commandAllocator;
-}
-
-ComPtr<ID3D12GraphicsCommandList> AppRenderer_dx12::CreateCommandList(D3D12_COMMAND_LIST_TYPE type)
-{
-	ComPtr<ID3D12GraphicsCommandList> commandList;
-	HRESULT hr = m_Device->CreateCommandList(0, type, m_CommandAllocators[m_CurrentBackBufferIndex].Get(), nullptr, IID_PPV_ARGS(&commandList));
-	if (FAILED(hr))
-	{
-		throw new std::exception("Failed to create command list");
-	}
-
-	hr = commandList->Close();
-
-	return commandList;
-}
-
-ComPtr<ID3D12Fence> AppRenderer_dx12::CreateFence()
-{
-	ComPtr<ID3D12Fence> fence;
-	HRESULT hr = m_Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-	if (FAILED(hr))
-	{
-		throw new std::exception("Failed to create fence");
-	}
-	return fence;
-}
-
-HANDLE AppRenderer_dx12::CreateEventHandle()
-{
-	HANDLE fenceEvent;
-
-	fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-	assert(fenceEvent && "Failed to create fence event");
-
-	return fenceEvent;
 }
