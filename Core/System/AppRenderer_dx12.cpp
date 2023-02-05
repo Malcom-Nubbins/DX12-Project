@@ -4,6 +4,8 @@ AppRenderer_dx12::AppRenderer_dx12(const HWND& hWnd)
 	: m_hWnd(hWnd)
 	, m_CurrentBackBufferIndex(0)
 	, m_RTVDescriptorSize(0)
+	, m_FenceValue(0)
+	, m_FenceEvent()
 {
 }
 

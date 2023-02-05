@@ -19,10 +19,12 @@ static WindowNameMap g_WindowByName;
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+uint64_t Application::m_FrameCount = 0;
+
 struct MakeWindow : public AppWindow
 {
-	MakeWindow(HWND hWnd, const std::wstring& windowName, UINT clientWidth, UINT clientHeight)
-		: AppWindow(hWnd, windowName, clientWidth, clientHeight)
+	MakeWindow(HWND hWnd, const std::wstring& windowName, UINT clientWidth, UINT clientHeight, bool vsync)
+		: AppWindow(hWnd, windowName, clientWidth, clientHeight, vsync)
 	{}
 };
 
@@ -55,6 +57,7 @@ UINT Application::GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE ty
 
 Application::Application(HINSTANCE hInst)
 	: m_hInstance(hInst)
+	, m_TearingSupported(false)
 {
 }
 
@@ -66,6 +69,12 @@ Application::~Application()
 void Application::Initialise()
 {
 	SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+#if defined(_DEBUG)
+	ComPtr<ID3D12Debug> debugInterface;
+	ThrowIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(&debugInterface)));
+	debugInterface->EnableDebugLayer();
+#endif
 
 	WNDCLASSEXW windowClass = { 0 };
 
@@ -94,6 +103,8 @@ void Application::Initialise()
 	m_DirectCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	m_ComputeCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE);
 	m_CopyCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY);
+
+	m_TearingSupported = CheckTearingSupport();
 }
 
 ComPtr<IDXGIAdapter4> Application::GetAdapter()
@@ -166,6 +177,24 @@ ComPtr<ID3D12Device2> Application::CreateDevice(ComPtr<IDXGIAdapter4> adapter)
 	return d3d12Device2;
 }
 
+bool Application::CheckTearingSupport()
+{
+	BOOL allowTearing = FALSE;
+
+	ComPtr<IDXGIFactory4> factory4;
+	if (SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory4))))
+	{
+		ComPtr<IDXGIFactory5> factory5;
+		if (SUCCEEDED(factory4.As(&factory5)))
+		{
+			factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+				&allowTearing, sizeof(allowTearing));
+		}
+	}
+
+	return allowTearing == TRUE;
+}
+
 
 void Application::Create(HINSTANCE hInst)
 {
@@ -192,7 +221,7 @@ void Application::Destroy()
 	}
 }
 
-std::shared_ptr<AppWindow> Application::CreateRenderWindow(const std::wstring& windowName, UINT clientWidth, UINT clientHeight)
+std::shared_ptr<AppWindow> Application::CreateRenderWindow(const std::wstring& windowName, UINT clientWidth, UINT clientHeight, bool vsync)
 {
 	WindowNameMap::iterator windowIter = g_WindowByName.find(windowName);
 	if (windowIter != g_WindowByName.end())
@@ -215,7 +244,7 @@ std::shared_ptr<AppWindow> Application::CreateRenderWindow(const std::wstring& w
 		return nullptr;
 	}
 
-	WindowPtr pWindow = std::make_shared<MakeWindow>(hwnd, windowName, clientWidth, clientHeight);
+	WindowPtr pWindow = std::make_shared<MakeWindow>(hwnd, windowName, clientWidth, clientHeight, vsync);
 
 	g_Windows.insert(WindowMap::value_type(hwnd, pWindow));
 	g_WindowByName.insert(WindowNameMap::value_type(windowName, pWindow));
@@ -315,6 +344,37 @@ static void RemoveWindow(HWND hwnd)
 	}
 }
 
+MouseButtonEvent::MouseButton DecodeMouseButton(UINT messageID)
+{
+	MouseButtonEvent::MouseButton mouseButton = MouseButtonEvent::None;
+	switch (messageID)
+	{
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_LBUTTONDBLCLK:
+	{
+		mouseButton = MouseButtonEvent::Left;
+	}
+	break;
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_RBUTTONDBLCLK:
+	{
+		mouseButton = MouseButtonEvent::Right;
+	}
+	break;
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+	case WM_MBUTTONDBLCLK:
+	{
+		mouseButton = MouseButtonEvent::Middle;
+	}
+	break;
+	}
+
+	return mouseButton;
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	WindowPtr pWindow;
@@ -332,21 +392,58 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 		{
 		case WM_PAINT:
 		{
-			pWindow->OnUpdate();
-			pWindow->OnRender();
+			UpdateEvent updateEvent(0.0, 0.0);
+			pWindow->OnUpdate(updateEvent);
+
+			RenderEvent renderEvent(0.0, 0.0);
+			pWindow->OnRender(renderEvent);
 		}
 		break;
 
 		case WM_SYSKEYDOWN:
 		case WM_KEYDOWN:
 		{
+			MSG charMsg;
+			unsigned int c = 0;
+
+			if (PeekMessage(&charMsg, hwnd, 0, 0, PM_NOREMOVE) && charMsg.message == WM_CHAR)
+			{
+				GetMessage(&charMsg, hwnd, 0, 0);
+				c = static_cast<unsigned int>(charMsg.wParam);
+			}
+
+			bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+			bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+			bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+			KeyCode::Key key = (KeyCode::Key)wParam;
+			unsigned int scanCode = (lParam & 0x00FF0000) >> 16;
+			KeyEvent keyEvent(key, c, KeyEvent::Pressed, ctrl, shift, alt);
+			pWindow->OnKeyPressed(keyEvent);
 		}
 		break;
 
 		case WM_SYSKEYUP:
 		case WM_KEYUP:
 		{
+			bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+			bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+			bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+			KeyCode::Key key = (KeyCode::Key)wParam;
+			unsigned int c = 0;
+			unsigned int scanCode = (lParam & 0x00FF0000) >> 16;
 
+			unsigned char keyboardState[256];
+			BOOL KeyboardStateRet = GetKeyboardState(keyboardState);
+			wchar_t translatedCharacters[4];
+
+			if (int result = ToUnicodeEx(static_cast<UINT>(wParam), scanCode, keyboardState, translatedCharacters, 4, 0, NULL) > 0)
+			{
+				c = translatedCharacters[0];
+			}
+
+			KeyEvent keyEvent(key, c, KeyEvent::Released, ctrl, shift, alt);
+			pWindow->OnKeyPressed(keyEvent);
 		}
 		break;
 
@@ -354,9 +451,82 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			break;
 
 		case WM_MOUSEMOVE:
-		{}
+		{
+			bool lmButton = (wParam & MK_LBUTTON) != 0;
+			bool rmButton = (wParam & MK_RBUTTON) != 0;
+			bool mmButton = (wParam & MK_MBUTTON) != 0;
+			bool shift = (wParam & MK_SHIFT) != 0;
+			bool ctrl = (wParam & MK_CONTROL) != 0;
+
+			int x = ((int)(short)LOWORD(lParam));
+			int y = ((int)(short)HIWORD(lParam));
+
+			MouseMotionEvent motionEvent(lmButton, mmButton, rmButton, ctrl, shift, x, y);
+			pWindow->OnMouseMoved(motionEvent);
+		}
 		break;
 
+		case WM_LBUTTONDOWN:
+		case WM_RBUTTONDOWN:
+		case WM_MBUTTONDOWN:
+		{
+			bool lmButton = (wParam & MK_LBUTTON) != 0;
+			bool rmButton = (wParam & MK_RBUTTON) != 0;
+			bool mmButton = (wParam & MK_MBUTTON) != 0;
+			bool shift = (wParam & MK_SHIFT) != 0;
+			bool ctrl = (wParam & MK_CONTROL) != 0;
+
+			int x = ((int)(short)LOWORD(lParam));
+			int y = ((int)(short)HIWORD(lParam));
+
+			MouseButtonEvent mouseButtonEvent(DecodeMouseButton(message), MouseButtonEvent::Pressed, lmButton, mmButton, rmButton, ctrl, shift, x, y);
+			pWindow->OnMouseButtonDown(mouseButtonEvent);
+		}
+		break;
+		case WM_LBUTTONUP:
+		case WM_RBUTTONUP:
+		case WM_MBUTTONUP:
+		{
+			bool lButton = (wParam & MK_LBUTTON) != 0;
+			bool rButton = (wParam & MK_RBUTTON) != 0;
+			bool mButton = (wParam & MK_MBUTTON) != 0;
+			bool shift = (wParam & MK_SHIFT) != 0;
+			bool control = (wParam & MK_CONTROL) != 0;
+
+			int x = ((int)(short)LOWORD(lParam));
+			int y = ((int)(short)HIWORD(lParam));
+
+			MouseButtonEvent mouseButtonEvent(DecodeMouseButton(message), MouseButtonEvent::Released, lButton, mButton, rButton, control, shift, x, y);
+			pWindow->OnMouseButtonUp(mouseButtonEvent);
+		}
+		break;
+		case WM_MOUSEWHEEL:
+		{
+			// The distance the mouse wheel is rotated.
+			// A positive value indicates the wheel was rotated to the right.
+			// A negative value indicates the wheel was rotated to the left.
+			float zDelta = ((int)(short)HIWORD(wParam)) / (float)WHEEL_DELTA;
+			short keyStates = (short)LOWORD(wParam);
+
+			bool lButton = (keyStates & MK_LBUTTON) != 0;
+			bool rButton = (keyStates & MK_RBUTTON) != 0;
+			bool mButton = (keyStates & MK_MBUTTON) != 0;
+			bool shift = (keyStates & MK_SHIFT) != 0;
+			bool control = (keyStates & MK_CONTROL) != 0;
+
+			int x = ((int)(short)LOWORD(lParam));
+			int y = ((int)(short)HIWORD(lParam));
+
+			// Convert the screen coordinates to client coordinates.
+			POINT clientToScreenPoint;
+			clientToScreenPoint.x = x;
+			clientToScreenPoint.y = y;
+			ScreenToClient(hwnd, &clientToScreenPoint);
+
+			MouseWheelEvent mouseWheelEvent(zDelta, lButton, mButton, rButton, control, shift, (int)clientToScreenPoint.x, (int)clientToScreenPoint.y);
+			pWindow->OnMouseWheel(mouseWheelEvent);
+		}
+		break;
 		case WM_SIZE:
 		{
 			UINT width = static_cast<UINT>(LOWORD(lParam));

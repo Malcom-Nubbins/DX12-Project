@@ -2,6 +2,8 @@
 #include <string>
 #include <memory>
 
+#include "../Globals/Events.h"
+
 class AppWindow;
 
 class AppEngineBase : public std::enable_shared_from_this<AppEngineBase>
@@ -16,22 +18,22 @@ public:
 	virtual bool Initialise();
 
 	virtual bool LoadContent() = 0;
-	virtual bool UnloadContent() = 0;
+	virtual void UnloadContent() = 0;
 
 	virtual void Cleanup();
 
 protected:
 	friend class AppWindow;
 
-	virtual void OnUpdate();
-	virtual void OnRender();
+	virtual void OnUpdate(UpdateEvent& e);
+	virtual void OnRender(RenderEvent& e);
 
-	virtual void OnKeyPressed();
-	virtual void OnKeyReleased();
-	virtual void OnMouseMoved();
-	virtual void OnMouseButtonDown();
-	virtual void OnMouseButtonUp();
-	virtual void OnMouseWheel();
+	virtual void OnKeyPressed(KeyEvent& e);
+	virtual void OnKeyReleased(KeyEvent& e);
+	virtual void OnMouseMoved(MouseMotionEvent& e);
+	virtual void OnMouseButtonDown(MouseButtonEvent& e);
+	virtual void OnMouseButtonUp(MouseButtonEvent& e);
+	virtual void OnMouseWheel(MouseWheelEvent& e);
 
 	virtual void OnResize(UINT width, UINT height);
 

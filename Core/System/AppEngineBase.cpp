@@ -23,7 +23,7 @@ bool AppEngineBase::Initialise()
 		return false;
 	}
 
-	m_AppWindow = Application::Get().CreateRenderWindow(m_Name, m_Width, m_Height);
+	m_AppWindow = Application::Get().CreateRenderWindow(m_Name, m_Width, m_Height, m_vSync);
 	m_AppWindow->RegisterCallbacks(shared_from_this());
 	m_AppWindow->Show();
 
@@ -36,35 +36,35 @@ void AppEngineBase::Cleanup()
 	m_AppWindow.reset();
 }
 
-void AppEngineBase::OnUpdate()
+void AppEngineBase::OnUpdate(UpdateEvent& e)
 {
 }
 
-void AppEngineBase::OnRender()
+void AppEngineBase::OnRender(RenderEvent& e)
 {
 }
 
-void AppEngineBase::OnKeyPressed()
+void AppEngineBase::OnKeyPressed(KeyEvent& e)
 {
 }
 
-void AppEngineBase::OnKeyReleased()
+void AppEngineBase::OnKeyReleased(KeyEvent& e)
 {
 }
 
-void AppEngineBase::OnMouseMoved()
+void AppEngineBase::OnMouseMoved(MouseMotionEvent& e)
 {
 }
 
-void AppEngineBase::OnMouseButtonDown()
+void AppEngineBase::OnMouseButtonDown(MouseButtonEvent& e)
 {
 }
 
-void AppEngineBase::OnMouseButtonUp()
+void AppEngineBase::OnMouseButtonUp(MouseButtonEvent& e)
 {
 }
 
-void AppEngineBase::OnMouseWheel()
+void AppEngineBase::OnMouseWheel(MouseWheelEvent& e)
 {
 }
 

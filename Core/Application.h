@@ -17,7 +17,7 @@ public:
 
 	static Application& Get();
 
-	std::shared_ptr<AppWindow> CreateRenderWindow(const std::wstring& windowName, UINT clientWidth, UINT clientHeight);
+	std::shared_ptr<AppWindow> CreateRenderWindow(const std::wstring& windowName, UINT clientWidth, UINT clientHeight, bool vsync);
 
 	void DestroyWindow(const std::wstring& windowName);
 	void DestroyWindow(std::shared_ptr<AppWindow> window);
@@ -35,6 +35,10 @@ public:
 	ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(UINT numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type);
 	UINT GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE type) const;
 
+	bool IsTearingSupported() const { return m_TearingSupported; }
+
+	static uint64_t GetFrameCount() { return m_FrameCount; }
+
 protected:
 	Application(HINSTANCE hInst);
 	virtual ~Application();
@@ -43,6 +47,7 @@ protected:
 
 	ComPtr<IDXGIAdapter4> GetAdapter();
 	ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter);
+	bool CheckTearingSupport();
 
 private:
 	Application(const Application& copy) = delete;
@@ -54,5 +59,9 @@ private:
 	std::shared_ptr<CommandQueue> m_DirectCommandQueue;
 	std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
 	std::shared_ptr<CommandQueue> m_CopyCommandQueue;
+
+	bool m_TearingSupported;
+
+	static uint64_t m_FrameCount;
 };
 
