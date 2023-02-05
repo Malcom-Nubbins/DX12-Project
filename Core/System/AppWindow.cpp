@@ -255,7 +255,7 @@ ComPtr<IDXGISwapChain4> AppWindow::CreateSwapChain()
 	Application& app = Application::Get();
 	ComPtr<IDXGISwapChain4> dxgiSwapChain4;
 	ComPtr<IDXGIFactory4> dxgiFactory4;
-	UINT createFactoryFlags;
+	UINT createFactoryFlags = 0;
 
 #if defined(_DEBUG)
 	createFactoryFlags = DXGI_CREATE_FACTORY_DEBUG;
